@@ -1,11 +1,3 @@
-<<<<<<< HEAD
+
 requests
 firebase-admin 
-=======
-git init
-git add .
-git commit -m 
-git branch -M main
-git remote add origin https://github.com/J4NIEL/rocket-alert-backend.git
-git push -u origin main
->>>>>>> 4e6cdf5ac75a67bbe5febf1130fff61aeb0ef728
