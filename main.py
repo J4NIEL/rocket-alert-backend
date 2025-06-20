@@ -3,20 +3,17 @@ from firebase_admin import credentials, messaging
 import requests
 import time
 import os
+import json
 
-<<<<<<< HEAD
 # Firebase Admin SDK'yı başlat
 # Render, google-services.json dosyasını bu yola koyacak
 cred = credentials.Certificate(os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', '/etc/secrets/google-services.json'))
 firebase_admin.initialize_app(cred)
 
 # Daha önce gönderilen uyarıların ID'lerini takip etmek için bir set
-=======
-cred = credentials.Certificate(os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', '/etc/secrets/google-services.json'))
-firebase_admin.initialize_app(cred)
-
->>>>>>> 4e6cdf5ac75a67bbe5febf1130fff61aeb0ef728
 processed_alert_ids = set()
+# Son kontrol edilen alert ID'sini takip et
+last_checked_id = 5458  # Başlangıç ID'si
 
 def send_fcm_notification(title, body):
     """Belirtilen konuya (topic) FCM bildirimi gönderir."""
@@ -25,11 +22,7 @@ def send_fcm_notification(title, body):
             title=title,
             body=body,
         ),
-<<<<<<< HEAD
         topic='alerts',  # Tüm kullanıcıların abone olacağı konu
-=======
-        topic='alerts',  
->>>>>>> 4e6cdf5ac75a67bbe5febf1130fff61aeb0ef728
         android=messaging.AndroidConfig(
             priority='high',
             notification=messaging.AndroidNotification(
@@ -43,64 +36,97 @@ def send_fcm_notification(title, body):
     except Exception as e:
         print(f"Bildirim gönderilirken hata oluştu: {e}")
 
-def check_for_alerts():
-    """tzevaadom.co.il API'sini kontrol eder ve yeni uyarılar için bildirim gönderir."""
-    global processed_alert_ids
+def check_alert_by_id(alert_id):
+    """Belirli bir alert ID'sini kontrol eder."""
     try:
-<<<<<<< HEAD
-        # API'den güncel verileri al
-        response = requests.get("https://www.tzevaadom.co.il/history/last-alerts.json")
-        response.raise_for_status()  # HTTP hatalarını kontrol et
-=======
+        url = f"https://www.tzevaadom.co.il/en/alerts/{alert_id}"
+        print(f"Alert ID {alert_id} kontrol ediliyor: {url}")
+        
+        response = requests.get(url, timeout=10)
+        
+        if response.status_code == 200:
+            # Sayfa içeriğini kontrol et
+            content = response.text
+            
+            # Eğer sayfa "Alert -" içeriyorsa ve boş değilse, bu bir aktif alert'tir
+            if "Alert -" in content and len(content.strip()) > 100:
+                print(f"Aktif alert bulundu: ID {alert_id}")
+                return True, content
+            else:
+                print(f"Alert ID {alert_id} aktif değil veya bulunamadı")
+                return False, None
+        else:
+            print(f"Alert ID {alert_id} için HTTP hatası: {response.status_code}")
+            return False, None
+            
+    except requests.exceptions.RequestException as e:
+        print(f"Alert ID {alert_id} kontrol edilirken hata: {e}")
+        return False, None
+    except Exception as e:
+        print(f"Beklenmeyen hata (Alert ID {alert_id}): {e}")
+        return False, None
 
-        response = requests.get("https://www.tzevaadom.co.il/history/last-alerts.json")
-        response.raise_for_status() 
->>>>>>> 4e6cdf5ac75a67bbe5febf1130fff61aeb0ef728
-        alerts = response.json()
+def extract_alert_info(content):
+    """Alert sayfasından bilgileri çıkarır."""
+    try:
+        # Basit bir şekilde sayfa başlığından şehir adını çıkarmaya çalış
+        if "Tzofar" in content:
+            return "Tzofar"
+        elif "Sderot" in content:
+            return "Sderot"
+        elif "Ashkelon" in content:
+            return "Ashkelon"
+        elif "Tel Aviv" in content:
+            return "Tel Aviv"
+        elif "Jerusalem" in content:
+            return "Jerusalem"
+        else:
+            return "İsrail'de bir bölge"
+    except:
+        return "Bilinmeyen bölge"
 
-        if not alerts:
-            print("Aktif alarm bulunamadı.")
-            return
-
-<<<<<<< HEAD
-        # Sadece yeni ve daha önce işlenmemiş uyarıları işle
-=======
->>>>>>> 4e6cdf5ac75a67bbe5febf1130fff61aeb0ef728
-        new_alerts = [alert for alert in alerts if alert['id'] not in processed_alert_ids]
-
-        if not new_alerts:
-            print("Yeni alarm bulunamadı.")
-            return
-
-        for alert in new_alerts:
-            alert_id = alert['id']
-            city = alert['data']
+def check_for_alerts():
+    """Yeni alert'leri kontrol eder."""
+    global processed_alert_ids, last_checked_id
+    
+    # Son 10 ID'yi kontrol et (yeni alert'ler için)
+    for i in range(5):
+        current_id = last_checked_id + i + 1
+        
+        # Eğer bu ID zaten işlendiyse atla
+        if current_id in processed_alert_ids:
+            continue
+            
+        is_active, content = check_alert_by_id(current_id)
+        
+        if is_active:
+            city = extract_alert_info(content)
             title = "🚨 Roket Alarmı 🚨"
-            body = f"Şu şehirde alarm verildi: {city}"
+            body = f"Şu bölgede alarm verildi: {city} (ID: {current_id})"
             
             print(f"Yeni alarm tespit edildi: {body}")
             send_fcm_notification(title, body)
-<<<<<<< HEAD
             
-            # Bu uyarıyı işlendi olarak işaretle
-=======
-
->>>>>>> 4e6cdf5ac75a67bbe5febf1130fff61aeb0ef728
-            processed_alert_ids.add(alert_id)
-
-    except requests.exceptions.RequestException as e:
-        print(f"API'ye erişilirken bir hata oluştu: {e}")
-    except Exception as e:
-        print(f"Bir hata oluştu: {e}")
+            # Bu alert'i işlendi olarak işaretle
+            processed_alert_ids.add(current_id)
+            
+            # Son kontrol edilen ID'yi güncelle
+            last_checked_id = current_id
+        else:
+            # Eğer bu ID aktif değilse, sonraki ID'leri kontrol etmeye devam et
+            pass
+    
+    # Son kontrol edilen ID'yi güncelle
+    last_checked_id += 1
+    
+    print(f"Son kontrol edilen ID: {last_checked_id}")
+    print("Aktif alarm bulunamadı.")
 
 if __name__ == "__main__":
     print("Roket Alarmı Takip Sistemi Başlatıldı...")
+    print("tzevaadom.co.il sitesinden alert'ler kontrol ediliyor...")
+    
     while True:
         check_for_alerts()
-<<<<<<< HEAD
-        # Her 3 saniyede bir kontrol et
-        time.sleep(3) 
-=======
-
-        time.sleep(3)
->>>>>>> 4e6cdf5ac75a67bbe5febf1130fff61aeb0ef728
+        # Her 60 saniyede bir kontrol et (site yükünü azaltmak için)
+        time.sleep(60) 
